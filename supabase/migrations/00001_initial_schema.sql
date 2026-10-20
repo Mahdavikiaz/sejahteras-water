@@ -4,6 +4,11 @@
 -- ============================================================
 
 -- ============================================================
+-- 0. EXTENSIONS
+-- ============================================================
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- ============================================================
 -- 1. TABEL: products
 -- ============================================================
 CREATE TABLE IF NOT EXISTS products (
@@ -99,13 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_stock_movements_reference_sale_id ON stock_moveme
 
 
 -- ============================================================
--- 5. EXTENSION: pg_trgm (untuk pencarian teks)
--- ============================================================
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
-
--- ============================================================
--- 6. SEQUENCE untuk kode transaksi
+-- 5. SEQUENCE untuk kode transaksi
 -- ============================================================
 CREATE SEQUENCE IF NOT EXISTS sale_code_seq START 1;
 
@@ -141,7 +140,7 @@ LEFT JOIN LATERAL (
 
 -- ============================================================
 -- 8. FUNCTION: generate_transaction_code()
---    Format: TRX-YYYYMMDD-XXXX
+--    Format: INV-XXXX (contoh: INV-0001, INV-0002)
 -- ============================================================
 CREATE OR REPLACE FUNCTION generate_transaction_code()
 RETURNS text
@@ -150,11 +149,9 @@ SET search_path = public
 AS $$
 DECLARE
   v_seq bigint;
-  v_date text;
 BEGIN
   v_seq := nextval('sale_code_seq');
-  v_date := to_char(now() AT TIME ZONE 'Asia/Jakarta', 'YYYYMMDD');
-  RETURN 'TRX-' || v_date || '-' || lpad(v_seq::text, 4, '0');
+  RETURN 'INV-' || lpad(v_seq::text, 4, '0');
 END;
 $$;
 
@@ -191,6 +188,16 @@ BEGIN
   -- Validasi: nama pembeli tidak boleh kosong
   IF p_buyer_name IS NULL OR trim(p_buyer_name) = '' THEN
     RAISE EXCEPTION 'Nama pembeli tidak boleh kosong';
+  END IF;
+
+  -- Normalisasi p_items jika diterima sebagai JSON string scalar
+  IF jsonb_typeof(p_items) = 'string' THEN
+    p_items := (p_items #>> '{}')::jsonb;
+  END IF;
+
+  -- Validasi: harus berupa array
+  IF jsonb_typeof(p_items) != 'array' THEN
+    RAISE EXCEPTION 'Format data items tidak valid: harus berupa JSON array';
   END IF;
 
   -- Validasi: harus ada minimal 1 item

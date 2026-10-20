@@ -25,15 +25,15 @@ export const productSchema = z.object({
     .transform((v) => v.trim())
     .default('pcs'),
   stock: z
-    .number({ invalid_type_error: 'Stok harus berupa angka' })
+    .number()
     .int('Stok harus bilangan bulat')
     .min(0, 'Stok tidak boleh negatif'),
   cost_price: z
-    .number({ invalid_type_error: 'Harga modal harus berupa angka' })
+    .number()
     .int('Harga modal harus bilangan bulat (rupiah)')
     .min(0, 'Harga modal tidak boleh negatif'),
   selling_price: z
-    .number({ invalid_type_error: 'Harga jual harus berupa angka' })
+    .number()
     .int('Harga jual harus bilangan bulat (rupiah)')
     .min(0, 'Harga jual tidak boleh negatif'),
   is_active: z.boolean().default(true),
@@ -53,7 +53,7 @@ export function validatePriceWarning(costPrice: number, sellingPrice: number): s
 export const saleItemSchema = z.object({
   product_id: z.string().uuid('ID produk tidak valid'),
   quantity: z
-    .number({ invalid_type_error: 'Jumlah harus berupa angka' })
+    .number()
     .int('Jumlah harus bilangan bulat')
     .min(1, 'Jumlah minimal 1'),
 });
@@ -110,7 +110,7 @@ export type CancelSaleSchemaType = z.infer<typeof cancelSaleSchema>;
 export const adjustStockSchema = z.object({
   product_id: z.string().uuid('ID produk tidak valid'),
   new_stock: z
-    .number({ invalid_type_error: 'Stok baru harus berupa angka' })
+    .number()
     .int('Stok baru harus bilangan bulat')
     .min(0, 'Stok baru tidak boleh negatif'),
   reason: z
