@@ -70,7 +70,7 @@ CREATE INDEX IF NOT EXISTS idx_sales_transaction_code ON sales (transaction_code
 -- ============================================================
 CREATE TABLE IF NOT EXISTS sale_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  sale_id uuid NOT NULL REFERENCES sales(id) ON DELETE RESTRICT,
+  sale_id uuid NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
   product_id uuid NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
   product_name_snapshot text NOT NULL,
   quantity integer NOT NULL CHECK (quantity > 0),
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS stock_movements (
   quantity_delta integer NOT NULL,
   stock_before integer NOT NULL,
   stock_after integer NOT NULL,
-  reference_sale_id uuid NULL REFERENCES sales(id) ON DELETE RESTRICT,
+  reference_sale_id uuid NULL REFERENCES sales(id) ON DELETE SET NULL,
   reason text NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -140,7 +140,7 @@ LEFT JOIN LATERAL (
 
 -- ============================================================
 -- 8. FUNCTION: generate_transaction_code()
---    Format: INV-XXXX (contoh: INV-0001, INV-0002)
+--    Format: INV-YYYYMMDD-XXX (contoh: INV-20261020-001)
 -- ============================================================
 CREATE OR REPLACE FUNCTION generate_transaction_code()
 RETURNS text
@@ -149,9 +149,11 @@ SET search_path = public
 AS $$
 DECLARE
   v_seq bigint;
+  v_date text;
 BEGIN
   v_seq := nextval('sale_code_seq');
-  RETURN 'INV-' || lpad(v_seq::text, 4, '0');
+  v_date := to_char(now() AT TIME ZONE 'Asia/Jakarta', 'YYYYMMDD');
+  RETURN 'INV-' || v_date || '-' || lpad(v_seq::text, 3, '0');
 END;
 $$;
 
@@ -414,6 +416,98 @@ $$;
 
 
 -- ============================================================
+-- 10b. RPC: delete_sale
+--      Hapus transaksi permanen & opsional kembalikan stok
+-- ============================================================
+CREATE OR REPLACE FUNCTION delete_sale(
+  p_sale_id uuid,
+  p_restore_stock boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_sale record;
+  v_item record;
+  v_stock_before integer;
+  v_code text;
+BEGIN
+  -- Kunci data transaksi
+  SELECT * INTO v_sale
+  FROM sales
+  WHERE id = p_sale_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Transaksi dengan ID % tidak ditemukan', p_sale_id;
+  END IF;
+
+  v_code := v_sale.transaction_code;
+
+  -- Jika transaksi masih status completed dan user meminta kembalikan stok
+  IF v_sale.status = 'completed' AND p_restore_stock = true THEN
+    FOR v_item IN
+      SELECT si.*, p.stock AS current_stock
+      FROM sale_items si
+      JOIN products p ON p.id = si.product_id
+      WHERE si.sale_id = p_sale_id
+      ORDER BY si.product_id
+      FOR UPDATE OF p
+    LOOP
+      v_stock_before := v_item.current_stock;
+
+      -- Tambah stok barang kembali
+      UPDATE products
+      SET stock = stock + v_item.quantity
+      WHERE id = v_item.product_id;
+
+      -- Catat riwayat pergerakan stok
+      INSERT INTO stock_movements (
+        product_id,
+        movement_type,
+        quantity_delta,
+        stock_before,
+        stock_after,
+        reference_sale_id,
+        reason
+      )
+      VALUES (
+        v_item.product_id,
+        'cancellation_return',
+        v_item.quantity,
+        v_stock_before,
+        v_stock_before + v_item.quantity,
+        NULL,
+        'Pengembalian stok dari penghapusan transaksi ' || v_code
+      );
+    END LOOP;
+  END IF;
+
+  -- Lepaskan relasi reference_sale_id di stock_movements
+  UPDATE stock_movements
+  SET reference_sale_id = NULL
+  WHERE reference_sale_id = p_sale_id;
+
+  -- Hapus item transaksi
+  DELETE FROM sale_items
+  WHERE sale_id = p_sale_id;
+
+  -- Hapus data transaksi dari sales
+  DELETE FROM sales
+  WHERE id = p_sale_id;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'sale_id', p_sale_id,
+    'transaction_code', v_code
+  );
+END;
+$$;
+
+
+-- ============================================================
 -- 11. RPC: adjust_stock
 --     Penyesuaian stok manual dengan alasan wajib
 -- ============================================================
@@ -530,6 +624,11 @@ CREATE POLICY "Authenticated users can update sales"
   USING (true)
   WITH CHECK (true);
 
+CREATE POLICY "Authenticated users can delete sales"
+  ON sales FOR DELETE
+  TO authenticated
+  USING (true);
+
 -- Sale Items: authenticated users full access
 CREATE POLICY "Authenticated users can view sale_items"
   ON sale_items FOR SELECT
@@ -540,6 +639,11 @@ CREATE POLICY "Authenticated users can insert sale_items"
   ON sale_items FOR INSERT
   TO authenticated
   WITH CHECK (true);
+
+CREATE POLICY "Authenticated users can delete sale_items"
+  ON sale_items FOR DELETE
+  TO authenticated
+  USING (true);
 
 -- Stock Movements: authenticated users full access
 CREATE POLICY "Authenticated users can view stock_movements"
@@ -562,6 +666,9 @@ GRANT EXECUTE ON FUNCTION create_sale TO authenticated;
 
 REVOKE EXECUTE ON FUNCTION cancel_sale FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION cancel_sale TO authenticated;
+
+REVOKE EXECUTE ON FUNCTION delete_sale FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION delete_sale TO authenticated;
 
 REVOKE EXECUTE ON FUNCTION adjust_stock FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION adjust_stock TO authenticated;

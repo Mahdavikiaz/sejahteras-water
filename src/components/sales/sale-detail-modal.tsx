@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { X, Loader2, Receipt, AlertCircle, Calendar, User, FileText, Ban } from 'lucide-react';
+import { X, Loader2, Receipt, AlertCircle, Calendar, User, FileText, Ban, Trash2 } from 'lucide-react';
 import { getSaleItems } from '@/app/actions/sales';
 import { formatRupiah, formatDateTime } from '@/lib/formatters';
 import type { SaleWithTotals, SaleItem } from '@/types';
@@ -10,12 +10,14 @@ interface SaleDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   sale: SaleWithTotals | null;
+  onDelete?: (sale: SaleWithTotals) => void;
 }
 
 export function SaleDetailModal({
   isOpen,
   onClose,
   sale,
+  onDelete,
 }: SaleDetailModalProps) {
   const [items, setItems] = useState<SaleItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -144,7 +146,6 @@ export function SaleDetailModal({
                   <tbody className="divide-y divide-slate-100">
                     {items.map((it) => {
                       const itemSubtotal = it.quantity * it.unit_selling_price_snapshot;
-                      const itemProfit = it.quantity * (it.unit_selling_price_snapshot - it.unit_cost_snapshot);
                       return (
                         <tr key={it.id}>
                           <td className="py-3 px-3 font-semibold text-slate-900">
@@ -186,7 +187,16 @@ export function SaleDetailModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-100 flex justify-end">
+        <div className="p-4 border-t border-slate-100 flex items-center justify-between">
+          {onDelete ? (
+            <button
+              onClick={() => onDelete(sale)}
+              className="px-3.5 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold transition-colors flex items-center gap-1.5 min-h-[40px]"
+            >
+              <Trash2 className="w-4 h-4" />
+              Hapus Transaksi
+            </button>
+          ) : <div />}
           <button
             onClick={onClose}
             className="px-5 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors min-h-[40px]"

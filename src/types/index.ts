@@ -1,9 +1,5 @@
-// ============================================================
-// AgenKu — Tipe Data Utama
-// ============================================================
-
 // ---- Konfigurasi Aplikasi ----
-export const APP_NAME = 'AgenKu';
+export const APP_NAME = 'Sejahtera Water';
 export const LOW_STOCK_THRESHOLD = 5;
 export const BUSINESS_TIMEZONE = 'Asia/Jakarta';
 
@@ -101,6 +97,12 @@ export interface CancelSaleResult {
   status: SaleStatus;
   cancelled_at: string;
   cancellation_reason: string;
+}
+
+export interface DeleteSaleResult {
+  success: boolean;
+  sale_id: string;
+  transaction_code: string;
 }
 
 // ---- Stock Movements ----

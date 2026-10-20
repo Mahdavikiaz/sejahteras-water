@@ -3,7 +3,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createSaleSchema, cancelSaleSchema } from '@/lib/validations/schemas';
 import { validateNoDuplicateProducts } from '@/lib/validations/schemas';
-import type { ActionResult, SaleWithTotals, SaleItem, PaginatedResult, CreateSaleResult, CancelSaleResult } from '@/types';
+import type { ActionResult, SaleWithTotals, SaleItem, PaginatedResult, CreateSaleResult, CancelSaleResult, DeleteSaleResult } from '@/types';
 import { requireAuth } from './auth';
 
 // ============================================================
@@ -102,6 +102,37 @@ export async function cancelSale(
   }
 
   return { success: true, data: data as CancelSaleResult };
+}
+
+/**
+ * Hapus transaksi via RPC (atomik)
+ */
+export async function deleteSale(
+  saleId: string,
+  restoreStock: boolean = false
+): Promise<ActionResult<DeleteSaleResult>> {
+  await requireAuth();
+
+  if (!saleId) {
+    return { success: false, error: 'ID transaksi tidak valid' };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase.rpc('delete_sale', {
+    p_sale_id: saleId,
+    p_restore_stock: restoreStock,
+  });
+
+  if (error) {
+    console.error('Error deleting sale:', error);
+    const pgMessage = error.message || '';
+    if (pgMessage.includes('tidak ditemukan')) {
+      return { success: false, error: pgMessage };
+    }
+    return { success: false, error: 'Gagal menghapus transaksi. Silakan coba lagi.' };
+  }
+
+  return { success: true, data: data as DeleteSaleResult };
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   Filter,
   Eye,
   Ban,
+  Trash2,
   Calendar,
   Loader2,
   CheckCircle2,
@@ -18,6 +19,7 @@ import { getSales } from '@/app/actions/sales';
 import { NewSaleForm } from './new-sale-form';
 import { SaleDetailModal } from './sale-detail-modal';
 import { CancelSaleModal } from './cancel-sale-modal';
+import { DeleteSaleModal } from './delete-sale-modal';
 import { formatRupiah, formatDateTime, getTodayStart, getTodayEnd } from '@/lib/formatters';
 import type { Product, SaleWithTotals } from '@/types';
 
@@ -52,6 +54,7 @@ export function SalesClient({
   // Modals
   const [selectedSaleDetail, setSelectedSaleDetail] = useState<SaleWithTotals | null>(null);
   const [selectedSaleCancel, setSelectedSaleCancel] = useState<SaleWithTotals | null>(null);
+  const [selectedSaleDelete, setSelectedSaleDelete] = useState<SaleWithTotals | null>(null);
 
   // Sync tab if URL changes
   useEffect(() => {
@@ -339,11 +342,20 @@ export function SalesClient({
                                 <button
                                   onClick={() => setSelectedSaleCancel(s)}
                                   title="Batalkan transaksi ini & kembalikan stok"
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
                                 >
                                   <Ban className="w-4 h-4" />
                                 </button>
                               )}
+
+                              {/* Hapus transaksi */}
+                              <button
+                                onClick={() => setSelectedSaleDelete(s)}
+                                title="Hapus transaksi ini secara permanen"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -370,6 +382,10 @@ export function SalesClient({
         isOpen={!!selectedSaleDetail}
         onClose={() => setSelectedSaleDetail(null)}
         sale={selectedSaleDetail}
+        onDelete={(sale) => {
+          setSelectedSaleDetail(null);
+          setSelectedSaleDelete(sale);
+        }}
       />
 
       <CancelSaleModal
@@ -377,6 +393,13 @@ export function SalesClient({
         onClose={() => setSelectedSaleCancel(null)}
         onSuccess={() => loadSales()}
         sale={selectedSaleCancel}
+      />
+
+      <DeleteSaleModal
+        isOpen={!!selectedSaleDelete}
+        onClose={() => setSelectedSaleDelete(null)}
+        onSuccess={() => loadSales()}
+        sale={selectedSaleDelete}
       />
     </div>
   );
